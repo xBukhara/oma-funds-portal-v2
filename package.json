@@ -1,0 +1,31 @@
+{
+  "name": "oma-funds-portal",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start -p 3000"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.4.1",
+    "@supabase/supabase-js": "^2.100.0",
+    "chart.js": "^4.4.1",
+    "framer-motion": "^11.0.0",
+    "next": "^14.2.5",
+    "nodemailer": "^6.9.13",
+    "pdf-parse": "^1.1.1",
+    "react": "^18.2.0",
+    "react-chartjs-2": "^5.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.12",
+    "@types/nodemailer": "^6.4.14",
+    "@types/pdf-parse": "^1.1.4",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "typescript": "^5.5.4"
+  }
+}

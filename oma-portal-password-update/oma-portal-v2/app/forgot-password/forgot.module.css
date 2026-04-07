@@ -1,0 +1,54 @@
+.successBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0 16px;
+  animation: fadeUp 0.4s ease both;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.successIcon {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: rgba(54,211,153,0.12);
+  border: 1px solid rgba(54,211,153,0.3);
+  color: #36d399;
+  font-size: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+
+.successTitle {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0;
+  color: var(--text);
+}
+
+.successSub {
+  font-size: 14px;
+  color: var(--muted);
+  line-height: 1.6;
+  margin: 0;
+  text-align: center;
+}
+
+.successSub strong { color: var(--text); }
+
+.backLink {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--blue);
+  transition: opacity 0.2s;
+}
+
+.backLink:hover { opacity: 0.75; text-decoration: underline; }

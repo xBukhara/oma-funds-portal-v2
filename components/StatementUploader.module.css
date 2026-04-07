@@ -1,0 +1,334 @@
+.wrap { display: flex; flex-direction: column; gap: 24px; }
+
+.header { margin-bottom: 4px; }
+
+.title {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.6px;
+  margin: 0 0 8px;
+}
+
+.sub {
+  font-size: 14px;
+  color: var(--muted);
+  margin: 0;
+  line-height: 1.6;
+  max-width: 60ch;
+}
+
+/* Drop zone */
+.dropzone {
+  border: 2px dashed rgba(255,255,255,0.1);
+  border-radius: 20px;
+  padding: 48px 32px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  background: rgba(14,22,40,0.4);
+}
+
+.dropzone:hover {
+  border-color: rgba(90,167,255,0.3);
+  background: rgba(90,167,255,0.04);
+}
+
+.dragging {
+  border-color: rgba(90,167,255,0.6) !important;
+  background: rgba(90,167,255,0.08) !important;
+}
+
+.hasFile {
+  border-color: rgba(54,211,153,0.4);
+  background: rgba(54,211,153,0.04);
+}
+
+.hiddenInput { display: none; }
+
+.dropContent { pointer-events: none; }
+
+.dropIcon {
+  font-size: 32px;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+.dropTitle {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0 0 6px;
+  color: var(--text);
+}
+
+.dropSub {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0;
+}
+
+.filePreview {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  text-align: left;
+}
+
+.fileIcon { font-size: 32px; }
+
+.fileName {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 4px;
+}
+
+.fileSize {
+  font-size: 13px;
+  color: var(--green);
+  margin: 0;
+}
+
+.clearBtn {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  padding: 6px 10px;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.clearBtn:hover { color: var(--red); }
+
+/* Pipeline */
+.pipeline {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: rgba(14,22,40,0.6);
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  padding: 20px 24px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.pipelineStep {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 160px;
+}
+
+.pipelineNum {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: rgba(90,167,255,0.12);
+  border: 1px solid rgba(90,167,255,0.25);
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.pipelineLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 2px;
+}
+
+.pipelineDesc {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+}
+
+.pipelineArrow {
+  color: var(--muted);
+  font-size: 16px;
+  margin-left: auto;
+  padding-right: 12px;
+}
+
+/* Upload button */
+.uploadBtn {
+  background: linear-gradient(135deg, #5aa7ff, #a78bfa);
+  border: none;
+  border-radius: 14px;
+  padding: 16px 28px;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.15s;
+  letter-spacing: 0.02em;
+}
+
+.uploadBtn:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
+.uploadBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.uploadingInner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: center;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Result */
+.result {
+  border-radius: 16px;
+  padding: 24px;
+  border: 1px solid;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; } }
+
+.resultSuccess {
+  background: rgba(54,211,153,0.06);
+  border-color: rgba(54,211,153,0.2);
+}
+
+.resultError {
+  background: rgba(248,113,113,0.06);
+  border-color: rgba(248,113,113,0.2);
+}
+
+.resultHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.resultIcon {
+  font-size: 20px;
+  color: var(--green);
+  font-weight: 700;
+  margin-top: 1px;
+}
+
+.resultIconError {
+  font-size: 20px;
+  color: var(--red);
+  font-weight: 700;
+}
+
+.resultTitle {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 4px;
+}
+
+.resultSub {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0;
+}
+
+.resultWarning {
+  font-size: 13px;
+  color: var(--gold);
+  margin: 12px 0 0;
+}
+
+.emailResults {
+  margin-top: 20px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  padding-top: 16px;
+}
+
+.emailResultsTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 12px;
+}
+
+.emailList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.emailRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.emailAddr { color: var(--muted); flex: 1; }
+.emailSent { color: var(--green); }
+.emailFailed { color: var(--red); }
+
+/* History */
+.history {
+  margin-top: 8px;
+}
+
+.historyTitle {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0 0 16px;
+  letter-spacing: -0.3px;
+}
+
+.historyTable {
+  background: rgba(14,22,40,0.6);
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.historyHeader {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  padding: 10px 20px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--card-border);
+  font-weight: 600;
+}
+
+.historyRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  padding: 13px 20px;
+  font-size: 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  transition: background 0.15s;
+}
+
+.historyRow:last-child { border-bottom: none; }
+.historyRow:hover { background: rgba(255,255,255,0.02); }
+
+.historyMuted { color: var(--muted); }
+.sent { color: var(--green); font-size: 13px; }
+.pending { color: var(--muted); font-size: 13px; }
