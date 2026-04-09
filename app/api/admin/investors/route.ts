@@ -122,3 +122,15 @@ export async function DELETE(req: NextRequest) {
 
   return NextResponse.json({ success: true });
 }
+export async function POST(req: NextRequest) {
+  if (!auth(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  // TEMPORARY DEBUG - remove after fixing
+  console.log('ENV CHECK:', {
+    hasServiceRole: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+    hasSecretKey: !!process.env.SUPABASE_SECRET_KEY,
+    hasUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+    hasSupabaseUrl: !!process.env.SUPABASE_URL,
+    serviceRoleLength: process.env.SUPABASE_SERVICE_ROLE_KEY?.length,
+    secretKeyLength: process.env.SUPABASE_SECRET_KEY?.length,
+  });
