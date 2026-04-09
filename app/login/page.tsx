@@ -12,42 +12,44 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   async function handleLogin(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
+  e.preventDefault();
+  setLoading(true);
+  setError('');
 
-    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
 
-    if (authError) {
-      setError('Invalid email or password. Please try again.');
-      setLoading(false);
-      return;
-    }
-
-    // Check if this is their first login (force password change)
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setError('Login failed.'); setLoading(false); return; }
-
-    const isFirstLogin = user.user_metadata?.force_password_change === true;
-    if (isFirstLogin) {
-      router.push('/change-password');
-      return;
-    }
-
-    // Fetch investor slug to redirect
-    const { data: investor } = await supabase
-      .from('investors')
-      .select('slug')
-      .eq('user_id', user.id)
-      .single();
-
-    if (investor?.slug) {
-      router.push(`/i/${investor.slug}`);
-    } else {
-      setError('Account not found. Please contact your fund manager.');
-      setLoading(false);
-    }
+  if (authError) {
+    setError('Invalid email or password. Please try again.');
+    setLoading(false);
+    return;
   }
+
+  const user = data.user;
+  if (!user) {
+    setError('Login failed.');
+    setLoading(false);
+    return;
+  }
+
+  const isFirstLogin = user.user_metadata?.force_password_change === true;
+  if (isFirstLogin) {
+    router.push('/change-password');
+    return;
+  }
+
+  const { data: investor } = await supabase
+    .from('investors')
+    .select('slug')
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  if (investor?.slug) {
+    router.push(`/i/${investor.slug}`);
+  } else {
+    setError('Account not found. Please contact your fund manager.');
+    setLoading(false);
+  }
+}
 
   return (
     <div className={styles.page}>
