@@ -5,7 +5,6 @@ function auth(req: NextRequest) {
   return req.headers.get('x-admin-secret') === process.env.ADMIN_SECRET;
 }
 
-// GET all investors
 export async function GET(req: NextRequest) {
   if (!auth(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -19,9 +18,17 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ investors: data });
 }
 
-// POST create investor + auth user
 export async function POST(req: NextRequest) {
   if (!auth(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  console.log('ENV CHECK:', {
+    hasServiceRole: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+    hasSecretKey: !!process.env.SUPABASE_SECRET_KEY,
+    hasUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+    hasSupabaseUrl: !!process.env.SUPABASE_URL,
+    serviceRoleLength: process.env.SUPABASE_SERVICE_ROLE_KEY?.length,
+    secretKeyLength: process.env.SUPABASE_SECRET_KEY?.length,
+  });
 
   const body = await req.json();
   const { name, email, slug, starting_capital, share_pct, temp_password } = body;
@@ -32,13 +39,12 @@ export async function POST(req: NextRequest) {
 
   const supabase = getServiceClient();
 
-  // Create Supabase auth user with force_password_change flag
   const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
     email,
     password: temp_password,
-    email_confirm: true, // auto-confirm so they can log in immediately
+    email_confirm: true,
     user_metadata: {
-      force_password_change: true, // triggers password change on first login
+      force_password_change: true,
       full_name: name,
     },
   });
@@ -50,7 +56,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Create investor record linked to auth user
   const { data: investor, error: invError } = await supabase
     .from('investors')
     .insert({
@@ -65,7 +70,6 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (invError) {
-    // Rollback auth user if investor record fails
     await supabase.auth.admin.deleteUser(authUser.user.id);
     return NextResponse.json(
       { error: `Investor record failed: ${invError.message}` },
@@ -76,7 +80,6 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ investor });
 }
 
-// PATCH update investor
 export async function PATCH(req: NextRequest) {
   if (!auth(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -97,7 +100,6 @@ export async function PATCH(req: NextRequest) {
   return NextResponse.json({ investor: data });
 }
 
-// DELETE investor + their auth user
 export async function DELETE(req: NextRequest) {
   if (!auth(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -117,20 +119,7 @@ export async function DELETE(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   if (inv?.user_id) {
-    await supabase.auth.admin.deleteUser(inv.user_id);
   }
 
   return NextResponse.json({ success: true });
 }
-export async function POST(req: NextRequest) {
-  if (!auth(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  // TEMPORARY DEBUG - remove after fixing
-  console.log('ENV CHECK:', {
-    hasServiceRole: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-    hasSecretKey: !!process.env.SUPABASE_SECRET_KEY,
-    hasUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
-    hasSupabaseUrl: !!process.env.SUPABASE_URL,
-    serviceRoleLength: process.env.SUPABASE_SERVICE_ROLE_KEY?.length,
-    secretKeyLength: process.env.SUPABASE_SECRET_KEY?.length,
-  });
