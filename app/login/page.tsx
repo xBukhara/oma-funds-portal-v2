@@ -1,11 +1,9 @@
 'use client';
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useRouter } from 'next/navigation';
 import styles from './login.module.css';
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -33,12 +31,10 @@ export default function LoginPage() {
 
     const isFirstLogin = user.user_metadata?.force_password_change === true;
     if (isFirstLogin) {
-      router.push('/change-password');
+      window.location.href = '/change-password';
       return;
     }
 
-    // Use slug from user metadata if available
-    // Otherwise fetch from API route which bypasses RLS
     const res = await fetch('/api/investor-slug', {
       headers: { 'x-user-id': user.id }
     });
@@ -46,7 +42,7 @@ export default function LoginPage() {
     const slugData = await res.json();
 
     if (slugData?.slug) {
-      router.push(`/i/${slugData.slug}`);
+      window.location.href = `/i/${slugData.slug}`;
     } else {
       setError('Account not found. Please contact your fund manager.');
       setLoading(false);
