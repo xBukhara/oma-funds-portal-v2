@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
-import { createSupabaseServerClient } from '@/lib/auth';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 import InvestorDashboard from '@/components/InvestorDashboard';
 
 interface Props {
@@ -7,31 +8,48 @@ interface Props {
 }
 
 export default async function InvestorPage({ params }: Props) {
-  const supabase = createSupabaseServerClient();
+  const cookieStore = cookies();
 
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;
+        },
+      },
+    }
+  );
 
-  // Verify this slug belongs to the logged-in user
-  const { data: investor } = await supabase
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) redirect('/login');
+
+  // Use service client to bypass RLS for investor lookup
+  const { createClient } = await import('@supabase/supabase-js');
+  const serviceClient = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SECRET_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+
+  const { data: investor } = await serviceClient
     .from('investors')
     .select('*')
     .eq('slug', params.slug)
-    .eq('user_id', user.id)
+    .eq('user_id', session.user.id)
     .single();
 
   if (!investor) redirect('/login');
 
-  // Fetch their NAV records sorted chronologically
-  const { data: navRecords } = await supabase
+  const { data: navRecords } = await serviceClient
     .from('nav_records')
     .select('*')
     .eq('investor_id', investor.id)
     .order('year', { ascending: true })
     .order('month', { ascending: true });
 
-  // Fetch latest statement info
-  const { data: latestStatement } = await supabase
+  const { data: latestStatement } = await serviceClient
     .from('statements')
     .select('*')
     .order('year', { ascending: false })
