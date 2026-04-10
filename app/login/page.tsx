@@ -12,44 +12,46 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   async function handleLogin(e: React.FormEvent) {
-  e.preventDefault();
-  setLoading(true);
-  setError('');
+    e.preventDefault();
+    setLoading(true);
+    setError('');
 
-  const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
 
-  if (authError) {
-    setError('Invalid email or password. Please try again.');
-    setLoading(false);
-    return;
+    if (authError) {
+      setError('Invalid email or password. Please try again.');
+      setLoading(false);
+      return;
+    }
+
+    const user = data.user;
+    if (!user) {
+      setError('Login failed.');
+      setLoading(false);
+      return;
+    }
+
+    const isFirstLogin = user.user_metadata?.force_password_change === true;
+    if (isFirstLogin) {
+      router.push('/change-password');
+      return;
+    }
+
+    // Use slug from user metadata if available
+    // Otherwise fetch from API route which bypasses RLS
+    const res = await fetch('/api/investor-slug', {
+      headers: { 'x-user-id': user.id }
+    });
+
+    const slugData = await res.json();
+
+    if (slugData?.slug) {
+      router.push(`/i/${slugData.slug}`);
+    } else {
+      setError('Account not found. Please contact your fund manager.');
+      setLoading(false);
+    }
   }
-
-  const user = data.user;
-  if (!user) {
-    setError('Login failed.');
-    setLoading(false);
-    return;
-  }
-
-  const isFirstLogin = user.user_metadata?.force_password_change === true;
-  if (isFirstLogin) {
-    router.push('/change-password');
-    return;
-  }
-
-  const { data: investor } = await supabase
-    .from('investors')
-    .select('slug')
-    .eq('user_id', user.id)
-    .maybeSingle();
-
-  if (investor?.slug) {
-    router.push(`/i/${investor.slug}`);
-  } else {
-    setError('Account not found. Please contact your fund manager.');
-    setLoading(false);
-  }
-}
 
   return (
     <div className={styles.page}>
@@ -61,7 +63,6 @@ export default function LoginPage() {
         <p className={styles.brand}>OMA FUNDS</p>
         <h1 className={styles.title}>Investor Portal</h1>
         <p className={styles.sub}>Sign in to access your account</p>
-
         <form onSubmit={handleLogin} className={styles.form}>
           <div className={styles.field}>
             <label className={styles.label}>Email</label>
@@ -75,7 +76,6 @@ export default function LoginPage() {
               autoComplete="email"
             />
           </div>
-
           <div className={styles.field}>
             <label className={styles.label}>Password</label>
             <input
@@ -91,14 +91,11 @@ export default function LoginPage() {
               Forgot password?
             </a>
           </div>
-
           {error && <p className={styles.error}>{error}</p>}
-
           <button type="submit" className={styles.btn} disabled={loading}>
             {loading ? 'Signing in…' : 'Sign In →'}
           </button>
         </form>
-
         <p className={styles.footer}>
           Need access?{' '}
           <a href="mailto:statements@omafunds.com" className={styles.link}>
