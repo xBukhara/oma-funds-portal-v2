@@ -2,6 +2,7 @@
 import { useEffect, useRef } from 'react';
 import { Chart, registerables } from 'chart.js';
 import type { Investor, NavRecord, Statement } from '@/types';
+import StockTicker from './StockTicker';
 import styles from './InvestorDashboard.module.css';
 
 Chart.register(...registerables);
@@ -32,7 +33,6 @@ export default function InvestorDashboard({ investor, navRecords, latestStatemen
       r.year === latestStatement.year && r.month === latestStatement.month
     );
 
-  // Format helpers
   const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
   const fmtPct = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
 
@@ -43,7 +43,6 @@ export default function InvestorDashboard({ investor, navRecords, latestStatemen
     const navValues = navRecords.map(r => r.nav);
     const returnValues = navRecords.map(r => r.monthly_return_pct);
 
-    // Equity curve
     if (equityChart.current) equityChart.current.destroy();
     equityChart.current = new Chart(equityRef.current, {
       type: 'line',
@@ -72,9 +71,7 @@ export default function InvestorDashboard({ investor, navRecords, latestStatemen
             borderWidth: 1,
             titleColor: '#a6b4d0',
             bodyColor: '#eaf2ff',
-            callbacks: {
-              label: ctx => ` ${fmt(ctx.raw as number)}`,
-            },
+            callbacks: { label: ctx => ` ${fmt(ctx.raw as number)}` },
           },
         },
         scales: {
@@ -87,7 +84,6 @@ export default function InvestorDashboard({ investor, navRecords, latestStatemen
       },
     });
 
-    // Monthly returns bar chart
     if (barChart.current) barChart.current.destroy();
     barChart.current = new Chart(barRef.current, {
       type: 'bar',
@@ -96,10 +92,7 @@ export default function InvestorDashboard({ investor, navRecords, latestStatemen
         datasets: [{
           label: 'Monthly Return',
           data: returnValues,
-          backgroundColor: returnValues.map(v => v >= 0
-            ? 'rgba(54,211,153,0.75)'
-            : 'rgba(248,113,113,0.75)'
-          ),
+          backgroundColor: returnValues.map(v => v >= 0 ? 'rgba(54,211,153,0.75)' : 'rgba(248,113,113,0.75)'),
           borderRadius: 6,
           borderSkipped: false,
         }],
@@ -115,9 +108,7 @@ export default function InvestorDashboard({ investor, navRecords, latestStatemen
             borderWidth: 1,
             titleColor: '#a6b4d0',
             bodyColor: '#eaf2ff',
-            callbacks: {
-              label: ctx => ` ${fmtPct(ctx.raw as number)}`,
-            },
+            callbacks: { label: ctx => ` ${fmtPct(ctx.raw as number)}` },
           },
         },
         scales: {
@@ -140,6 +131,9 @@ export default function InvestorDashboard({ investor, navRecords, latestStatemen
     <div className={styles.page}>
       <div className={styles.bg} />
 
+      {/* Stock Ticker */}
+      <StockTicker />
+
       {/* Nav */}
       <header className={styles.header}>
         <div className={styles.headerInner}>
@@ -152,20 +146,27 @@ export default function InvestorDashboard({ investor, navRecords, latestStatemen
           </div>
           <div className={styles.headerRight}>
             <span className={styles.investorBadge}>{investor.name}</span>
-            <LogoutButton />
+            <button
+              className={styles.logoutBtn}
+              onClick={async () => {
+                const { supabase } = await import('@/lib/supabase');
+                await supabase.auth.signOut();
+                window.location.href = '/login';
+              }}
+            >
+              Sign Out
+            </button>
           </div>
         </div>
       </header>
 
       <main className={styles.main}>
-        {/* New statement banner */}
         {isNewStatement && (
           <div className={styles.banner}>
             📄 A new statement is available for {MONTHS[latestStatement!.month]} {latestStatement!.year}
           </div>
         )}
 
-        {/* Hero metrics */}
         <div className={styles.heroGrid}>
           <div className={styles.navCard}>
             <p className={styles.metricLabel}>Your Account Value</p>
@@ -174,52 +175,29 @@ export default function InvestorDashboard({ investor, navRecords, latestStatemen
           </div>
 
           <div className={styles.metricsGrid}>
-            <MetricCard
-              label="Last Month Return"
-              value={fmtPct(currentReturn)}
-              color={currentReturn >= 0 ? 'green' : 'red'}
-            />
-            <MetricCard
-              label="Total Gain / Loss"
-              value={fmt(totalGain)}
-              color={totalGain >= 0 ? 'green' : 'red'}
-            />
-            <MetricCard
-              label="Overall Return"
-              value={fmtPct(totalGainPct)}
-              color={totalGainPct >= 0 ? 'green' : 'red'}
-            />
-            <MetricCard
-              label="Months Reporting"
-              value={`${navRecords.length}`}
-              color="blue"
-            />
+            <MetricCard label="Last Month Return" value={fmtPct(currentReturn)} color={currentReturn >= 0 ? 'green' : 'red'} />
+            <MetricCard label="Total Gain / Loss" value={fmt(totalGain)} color={totalGain >= 0 ? 'green' : 'red'} />
+            <MetricCard label="Overall Return" value={fmtPct(totalGainPct)} color={totalGainPct >= 0 ? 'green' : 'red'} />
+            <MetricCard label="Months Reporting" value={`${navRecords.length}`} color="blue" />
           </div>
         </div>
 
-        {/* Equity curve */}
         <div className={styles.chartCard}>
           <div className={styles.chartHeader}>
             <h2 className={styles.chartTitle}>Account Value Growth</h2>
             <p className={styles.chartSub}>Your NAV over time</p>
           </div>
-          <div className={styles.chartWrap}>
-            <canvas ref={equityRef} />
-          </div>
+          <div className={styles.chartWrap}><canvas ref={equityRef} /></div>
         </div>
 
-        {/* Monthly returns */}
         <div className={styles.chartCard}>
           <div className={styles.chartHeader}>
             <h2 className={styles.chartTitle}>Monthly Performance</h2>
             <p className={styles.chartSub}>Gain / loss per month</p>
           </div>
-          <div className={styles.chartWrap}>
-            <canvas ref={barRef} />
-          </div>
+          <div className={styles.chartWrap}><canvas ref={barRef} /></div>
         </div>
 
-        {/* Returns table */}
         {navRecords.length > 0 && (
           <div className={styles.tableCard}>
             <h2 className={styles.chartTitle} style={{ marginBottom: 20 }}>Statement History</h2>
@@ -254,30 +232,12 @@ export default function InvestorDashboard({ investor, navRecords, latestStatemen
 
 function MetricCard({ label, value, color }: { label: string; value: string; color: string }) {
   const colorMap: Record<string, string> = {
-    green: 'var(--green)',
-    red: 'var(--red)',
-    blue: 'var(--blue)',
-    gold: 'var(--gold)',
+    green: 'var(--green)', red: 'var(--red)', blue: 'var(--blue)', gold: 'var(--gold)',
   };
   return (
     <div className={styles.metricCard}>
       <p className={styles.metricLabel}>{label}</p>
       <p className={styles.metricValue} style={{ color: colorMap[color] ?? 'var(--text)' }}>{value}</p>
     </div>
-  );
-}
-
-function LogoutButton() {
-  const { supabase } = require('@/lib/supabase');
-  return (
-    <button
-      className={styles.logoutBtn}
-      onClick={async () => {
-        await supabase.auth.signOut();
-        window.location.href = '/login';
-      }}
-    >
-      Sign Out
-    </button>
   );
 }
