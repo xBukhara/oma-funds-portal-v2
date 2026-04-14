@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { Investor } from '@/types';
 import styles from './InvestorTable.module.css';
 
@@ -13,16 +13,36 @@ const EMPTY_FORM = {
   starting_capital: '', share_pct: '', temp_password: '',
 };
 
-export default function InvestorTable({ investors, onUpdate }: Props) {
+export default function InvestorTable({ investors: initialInvestors, onUpdate }: Props) {
+  const [investors, setInvestors] = useState<Investor[]>(initialInvestors);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [fetching, setFetching] = useState(false);
 
   const adminSecret = process.env.NEXT_PUBLIC_ADMIN_SECRET ?? '';
-
   const headers = { 'Content-Type': 'application/json', 'x-admin-secret': adminSecret };
+
+  useEffect(() => {
+    async function fetchInvestors() {
+      setFetching(true);
+      try {
+        const res = await fetch('/api/admin/investors', { headers });
+        const data = await res.json();
+        if (data.investors) {
+          setInvestors(data.investors);
+          onUpdate(data.investors);
+        }
+      } catch (e) {
+        console.error('Failed to fetch investors', e);
+      } finally {
+        setFetching(false);
+      }
+    }
+    fetchInvestors();
+  }, []);
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
@@ -46,7 +66,9 @@ export default function InvestorTable({ investors, onUpdate }: Props) {
       return;
     }
 
-    onUpdate([data.investor, ...investors]);
+    const updated = [data.investor, ...investors];
+    setInvestors(updated);
+    onUpdate(updated);
     setForm(EMPTY_FORM);
     setShowAdd(false);
     setSaving(false);
@@ -55,7 +77,9 @@ export default function InvestorTable({ investors, onUpdate }: Props) {
   async function handleDelete(id: string) {
     const res = await fetch(`/api/admin/investors?id=${id}`, { method: 'DELETE', headers });
     if (res.ok) {
-      onUpdate(investors.filter(i => i.id !== id));
+      const updated = investors.filter(i => i.id !== id);
+      setInvestors(updated);
+      onUpdate(updated);
     }
     setDeleteConfirm(null);
   }
@@ -67,14 +91,15 @@ export default function InvestorTable({ investors, onUpdate }: Props) {
       <div className={styles.topBar}>
         <div>
           <h1 className={styles.title}>Investors</h1>
-          <p className={styles.sub}>{investors.length} investor{investors.length !== 1 ? 's' : ''} in the fund</p>
+          <p className={styles.sub}>
+            {fetching ? 'Loading...' : `${investors.length} investor${investors.length !== 1 ? 's' : ''} in the fund`}
+          </p>
         </div>
         <button className={styles.addBtn} onClick={() => setShowAdd(!showAdd)}>
           {showAdd ? 'Cancel' : '+ Add Investor'}
         </button>
       </div>
 
-      {/* Add form */}
       {showAdd && (
         <form onSubmit={handleAdd} className={styles.addForm}>
           <h2 className={styles.formTitle}>New Investor</h2>
@@ -119,7 +144,6 @@ export default function InvestorTable({ investors, onUpdate }: Props) {
         </form>
       )}
 
-      {/* Table */}
       {investors.length === 0 ? (
         <div className={styles.empty}>
           <p className={styles.emptyTitle}>No investors yet</p>
@@ -145,20 +169,13 @@ export default function InvestorTable({ investors, onUpdate }: Props) {
                   <td className={styles.nameCell}>{inv.name}</td>
                   <td className={styles.mutedCell}>{inv.email}</td>
                   <td>
-                    <a
-                      href={`/i/${inv.slug}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={styles.slugLink}
-                    >
+                    <a href={`/i/${inv.slug}`} target="_blank" rel="noopener noreferrer" className={styles.slugLink}>
                       /i/{inv.slug} ↗
                     </a>
                   </td>
                   <td>{fmt(inv.starting_capital)}</td>
                   <td>{inv.share_pct}%</td>
-                  <td className={styles.mutedCell}>
-                    {new Date(inv.created_at).toLocaleDateString()}
-                  </td>
+                  <td className={styles.mutedCell}>{new Date(inv.created_at).toLocaleDateString()}</td>
                   <td>
                     {deleteConfirm === inv.id ? (
                       <div className={styles.confirmRow}>
@@ -167,9 +184,7 @@ export default function InvestorTable({ investors, onUpdate }: Props) {
                         <button className={styles.confirmNo} onClick={() => setDeleteConfirm(null)}>No</button>
                       </div>
                     ) : (
-                      <button className={styles.deleteBtn} onClick={() => setDeleteConfirm(inv.id)}>
-                        Remove
-                      </button>
+                      <button className={styles.deleteBtn} onClick={() => setDeleteConfirm(inv.id)}>Remove</button>
                     )}
                   </td>
                 </tr>
