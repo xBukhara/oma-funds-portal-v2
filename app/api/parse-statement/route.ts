@@ -94,9 +94,7 @@ export async function POST(req: NextRequest) {
     for (const investor of investors as Investor[]) {
       const investorMonthly = computeInvestorNAV(
         investor.starting_capital,
-        investor.share_pct,
         monthlyReturns,
-        navTotal
       );
 
       for (const { month, nav, returnPct } of investorMonthly) {
