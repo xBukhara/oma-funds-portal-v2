@@ -7,9 +7,10 @@ import AdminDashboard from './AdminDashboard';
 import AdminGrowth from './AdminGrowth';
 import AdminTapeDecoder from './AdminTapeDecoder';
 import EmailLog from './EmailLog';
+import AccountHistory from './AccountHistory';
 import styles from './AdminPortal.module.css';
 
-type Tab = 'upload' | 'investors' | 'dashboard' | 'growth' | 'tape' | 'emails';
+type Tab = 'upload' | 'investors' | 'history' | 'dashboard' | 'growth' | 'tape' | 'emails';
 
 interface Props {
   investors: Investor[];
@@ -21,6 +22,7 @@ interface Props {
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'upload',    label: 'Upload Statement', icon: '↑' },
   { id: 'investors', label: 'Investors',         icon: '◎' },
+  { id: 'history',   label: 'Account History',  icon: '⇄' },
   { id: 'dashboard', label: 'OMA Dashboard',     icon: '▦' },
   { id: 'growth',    label: 'OMA Growth',        icon: '↗' },
   { id: 'tape',      label: 'Tape Decoder',      icon: '◈' },
@@ -30,8 +32,6 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
 export default function AdminPortal({ investors, fundReturns, statements, emailLog }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('upload');
   const [liveInvestors, setLiveInvestors] = useState<Investor[]>(investors);
-
-  const adminSecret = process.env.NEXT_PUBLIC_ADMIN_SECRET ?? '';
 
   return (
     <div className={styles.page}>
@@ -75,16 +75,13 @@ export default function AdminPortal({ investors, fundReturns, statements, emailL
       <main className={styles.main}>
         <div className={styles.content}>
           {activeTab === 'upload' && (
-            <StatementUploader
-              statements={statements}
-              investors={liveInvestors}
-            />
+            <StatementUploader statements={statements} investors={liveInvestors} />
           )}
           {activeTab === 'investors' && (
-            <InvestorTable
-              investors={liveInvestors}
-              onUpdate={setLiveInvestors}
-            />
+            <InvestorTable investors={liveInvestors} onUpdate={setLiveInvestors} />
+          )}
+          {activeTab === 'history' && (
+            <AccountHistory investors={liveInvestors} />
           )}
           {activeTab === 'dashboard' && (
             <AdminDashboard fundReturns={fundReturns} />
