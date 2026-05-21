@@ -1,0 +1,41 @@
+/* Add these to the END of InvestorTable.module.css */
+
+.topActions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.actionBtn {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px;
+  padding: 10px 16px;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--font-body);
+  transition: all 0.15s;
+}
+
+.actionBtn:hover { color: var(--text); border-color: rgba(255,255,255,0.2); }
+
+.actionBtnActive {
+  background: rgba(90,167,255,0.1);
+  border-color: rgba(90,167,255,0.3);
+  color: var(--blue);
+}
+
+.addBtnCancel {
+  background: transparent !important;
+  border: 1px solid rgba(248,113,113,0.3) !important;
+  color: var(--red) !important;
+}
+
+.csvWrap {
+  background: rgba(14,22,40,0.6);
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  padding: 24px;
+}

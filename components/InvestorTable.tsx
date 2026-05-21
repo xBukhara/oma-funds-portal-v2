@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import type { Investor } from '@/types';
+import CSVUploader from './CSVUploader';
 import styles from './InvestorTable.module.css';
 
 interface Props {
@@ -15,7 +16,7 @@ const EMPTY_FORM = {
 
 export default function InvestorTable({ investors: initialInvestors, onUpdate }: Props) {
   const [investors, setInvestors] = useState<Investor[]>(initialInvestors);
-  const [showAdd, setShowAdd] = useState(false);
+  const [mode, setMode] = useState<'table' | 'add' | 'csv'>('table');
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -26,23 +27,24 @@ export default function InvestorTable({ investors: initialInvestors, onUpdate }:
   const headers = { 'Content-Type': 'application/json', 'x-admin-secret': adminSecret };
 
   useEffect(() => {
-    async function fetchInvestors() {
-      setFetching(true);
-      try {
-        const res = await fetch('/api/admin/investors', { headers });
-        const data = await res.json();
-        if (data.investors) {
-          setInvestors(data.investors);
-          onUpdate(data.investors);
-        }
-      } catch (e) {
-        console.error('Failed to fetch investors', e);
-      } finally {
-        setFetching(false);
-      }
-    }
     fetchInvestors();
   }, []);
+
+  async function fetchInvestors() {
+    setFetching(true);
+    try {
+      const res = await fetch('/api/admin/investors', { headers });
+      const data = await res.json();
+      if (data.investors) {
+        setInvestors(data.investors);
+        onUpdate(data.investors);
+      }
+    } catch (e) {
+      console.error('Failed to fetch investors', e);
+    } finally {
+      setFetching(false);
+    }
+  }
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
@@ -70,7 +72,7 @@ export default function InvestorTable({ investors: initialInvestors, onUpdate }:
     setInvestors(updated);
     onUpdate(updated);
     setForm(EMPTY_FORM);
-    setShowAdd(false);
+    setMode('table');
     setSaving(false);
   }
 
@@ -95,12 +97,31 @@ export default function InvestorTable({ investors: initialInvestors, onUpdate }:
             {fetching ? 'Loading...' : `${investors.length} investor${investors.length !== 1 ? 's' : ''} in the fund`}
           </p>
         </div>
-        <button className={styles.addBtn} onClick={() => setShowAdd(!showAdd)}>
-          {showAdd ? 'Cancel' : '+ Add Investor'}
-        </button>
+        <div className={styles.topActions}>
+          <button
+            className={`${styles.actionBtn} ${mode === 'csv' ? styles.actionBtnActive : ''}`}
+            onClick={() => setMode(mode === 'csv' ? 'table' : 'csv')}
+          >
+            📋 CSV Import
+          </button>
+          <button
+            className={`${styles.addBtn} ${mode === 'add' ? styles.addBtnCancel : ''}`}
+            onClick={() => setMode(mode === 'add' ? 'table' : 'add')}
+          >
+            {mode === 'add' ? 'Cancel' : '+ Add Investor'}
+          </button>
+        </div>
       </div>
 
-      {showAdd && (
+      {/* CSV Uploader */}
+      {mode === 'csv' && (
+        <div className={styles.csvWrap}>
+          <CSVUploader onComplete={() => { fetchInvestors(); setMode('table'); }} />
+        </div>
+      )}
+
+      {/* Add form */}
+      {mode === 'add' && (
         <form onSubmit={handleAdd} className={styles.addForm}>
           <h2 className={styles.formTitle}>New Investor</h2>
           <div className={styles.formGrid}>
@@ -122,7 +143,7 @@ export default function InvestorTable({ investors: initialInvestors, onUpdate }:
             <Field label="Temp Password" required>
               <input type="password" className={styles.input} value={form.temp_password}
                 onChange={e => setForm(f => ({ ...f, temp_password: e.target.value }))}
-                placeholder="Investor sets their own on first login" required />
+                placeholder="Temporary password" required />
             </Field>
             <Field label="Starting Capital ($)" required>
               <input type="number" className={styles.input} value={form.starting_capital}
@@ -144,54 +165,57 @@ export default function InvestorTable({ investors: initialInvestors, onUpdate }:
         </form>
       )}
 
-      {investors.length === 0 ? (
-        <div className={styles.empty}>
-          <p className={styles.emptyTitle}>No investors yet</p>
-          <p className={styles.emptySub}>Add your first investor using the button above.</p>
-        </div>
-      ) : (
-        <div className={styles.tableWrap}>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Portal URL</th>
-                <th>Starting Capital</th>
-                <th>Share %</th>
-                <th>Added</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {investors.map(inv => (
-                <tr key={inv.id}>
-                  <td className={styles.nameCell}>{inv.name}</td>
-                  <td className={styles.mutedCell}>{inv.email}</td>
-                  <td>
-                    <a href={`/i/${inv.slug}`} target="_blank" rel="noopener noreferrer" className={styles.slugLink}>
-                      /i/{inv.slug} ↗
-                    </a>
-                  </td>
-                  <td>{fmt(inv.starting_capital)}</td>
-                  <td>{inv.share_pct}%</td>
-                  <td className={styles.mutedCell}>{new Date(inv.created_at).toLocaleDateString()}</td>
-                  <td>
-                    {deleteConfirm === inv.id ? (
-                      <div className={styles.confirmRow}>
-                        <span className={styles.confirmText}>Delete?</span>
-                        <button className={styles.confirmYes} onClick={() => handleDelete(inv.id)}>Yes</button>
-                        <button className={styles.confirmNo} onClick={() => setDeleteConfirm(null)}>No</button>
-                      </div>
-                    ) : (
-                      <button className={styles.deleteBtn} onClick={() => setDeleteConfirm(inv.id)}>Remove</button>
-                    )}
-                  </td>
+      {/* Table */}
+      {mode === 'table' && (
+        investors.length === 0 ? (
+          <div className={styles.empty}>
+            <p className={styles.emptyTitle}>No investors yet</p>
+            <p className={styles.emptySub}>Add investors manually or import via CSV.</p>
+          </div>
+        ) : (
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Portal URL</th>
+                  <th>Starting Capital</th>
+                  <th>Share %</th>
+                  <th>Added</th>
+                  <th></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {investors.map(inv => (
+                  <tr key={inv.id}>
+                    <td className={styles.nameCell}>{inv.name}</td>
+                    <td className={styles.mutedCell}>{inv.email}</td>
+                    <td>
+                      <a href={`/i/${inv.slug}`} target="_blank" rel="noopener noreferrer" className={styles.slugLink}>
+                        /i/{inv.slug} ↗
+                      </a>
+                    </td>
+                    <td>{fmt(inv.starting_capital)}</td>
+                    <td>{inv.share_pct}%</td>
+                    <td className={styles.mutedCell}>{new Date(inv.created_at).toLocaleDateString()}</td>
+                    <td>
+                      {deleteConfirm === inv.id ? (
+                        <div className={styles.confirmRow}>
+                          <span className={styles.confirmText}>Delete?</span>
+                          <button className={styles.confirmYes} onClick={() => handleDelete(inv.id)}>Yes</button>
+                          <button className={styles.confirmNo} onClick={() => setDeleteConfirm(null)}>No</button>
+                        </div>
+                      ) : (
+                        <button className={styles.deleteBtn} onClick={() => setDeleteConfirm(inv.id)}>Remove</button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
       )}
     </div>
   );
