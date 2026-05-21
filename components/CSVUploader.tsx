@@ -24,7 +24,7 @@ interface Props {
   onComplete: () => void;
 }
 
-const TEMPLATE_CSV = `name,email,slug,starting_capital,share_pct,temp_password
+const TEMPLATE_CSV = `name,email,slug,current_nav,share_pct,temp_password
 John Smith,john@email.com,john-smith,50000,15.5,OMAFunds2025!
 Jane Doe,jane@email.com,jane-doe,30000,10.2,OMAFunds2025!`;
 
@@ -43,22 +43,34 @@ export default function CSVUploader({ onComplete }: Props) {
     if (lines.length < 2) return [];
 
     const headers = lines[0].toLowerCase().split(',').map(h => h.trim());
-    const required = ['name', 'email', 'slug', 'starting_capital', 'temp_password'];
 
     return lines.slice(1).map(line => {
       const values = line.split(',').map(v => v.trim());
       const row: Record<string, string> = {};
       headers.forEach((h, i) => { row[h] = values[i] ?? ''; });
 
-      const missing = required.filter(r => !row[r]);
+      // Accept multiple column name variants for starting capital
+      const capitalValue =
+        row['starting_capital'] ||
+        row['current_nav'] ||
+        row['invested'] ||
+        row['net_capital'] ||
+        '0';
+
+      // Accept multiple column name variants for share %
+      const sharePctRaw = (row['share_pct'] || row['share_%'] || '0').replace('%', '');
+
+      const missing = ['name', 'slug', 'temp_password'].filter(r => !row[r]);
+      const hasCapital = parseFloat(capitalValue) > 0;
+      if (!hasCapital) missing.push('starting capital (current_nav or invested)');
       const valid = missing.length === 0;
 
       return {
         name: row['name'] ?? '',
         email: row['email'] ?? '',
         slug: row['slug'] ?? '',
-        starting_capital: parseFloat(row['starting_capital']) || 0,
-        share_pct: parseFloat(row['share_pct']) || 0,
+        starting_capital: parseFloat(capitalValue) || 0,
+        share_pct: parseFloat(sharePctRaw) || 0,
         temp_password: row['temp_password'] ?? '',
         valid,
         error: valid ? undefined : `Missing: ${missing.join(', ')}`,
@@ -130,7 +142,6 @@ export default function CSVUploader({ onComplete }: Props) {
         </button>
       </div>
 
-      {/* Drop zone */}
       {parsed.length === 0 && (
         <div
           className={`${styles.dropzone} ${dragging ? styles.dragging : ''}`}
@@ -152,7 +163,6 @@ export default function CSVUploader({ onComplete }: Props) {
         </div>
       )}
 
-      {/* Preview table */}
       {parsed.length > 0 && !done && (
         <>
           <div className={styles.previewHeader}>
@@ -188,7 +198,9 @@ export default function CSVUploader({ onComplete }: Props) {
                       }
                     </td>
                     <td>{row.name}</td>
-                    <td>{row.email}</td>
+                    <td style={{ color: row.email ? 'var(--muted)' : 'var(--red)' }}>
+                      {row.email || 'No email — will skip'}
+                    </td>
                     <td className={styles.mono}>/i/{row.slug}</td>
                     <td>${row.starting_capital.toLocaleString()}</td>
                     <td>{row.share_pct}%</td>
@@ -212,23 +224,29 @@ export default function CSVUploader({ onComplete }: Props) {
         </>
       )}
 
-      {/* Results */}
       {done && results.length > 0 && (
         <div className={styles.results}>
           <h3 className={styles.resultsTitle}>
             Import Complete — {results.filter(r => r.status === 'created').length} created,{' '}
+            {results.filter(r => r.status === 'skipped').length} skipped,{' '}
             {results.filter(r => r.status === 'failed').length} failed
           </h3>
           <div className={styles.resultList}>
             {results.map((r, i) => (
               <div key={i} className={styles.resultRow}>
-                <span className={r.status === 'created' ? styles.valid : styles.invalid}>
-                  {r.status === 'created' ? '✓' : '✗'}
+                <span className={
+                  r.status === 'created' ? styles.valid :
+                  r.status === 'skipped' ? styles.skipped : styles.invalid
+                }>
+                  {r.status === 'created' ? '✓' : r.status === 'skipped' ? '○' : '✗'}
                 </span>
                 <span className={styles.resultName}>{r.name}</span>
-                <span className={styles.resultEmail}>{r.email}</span>
-                <span className={r.status === 'created' ? styles.statGreen : styles.statRed}>
-                  {r.status === 'created' ? 'Created' : r.error}
+                <span className={styles.resultEmail}>{r.email || 'no email'}</span>
+                <span className={
+                  r.status === 'created' ? styles.statGreen :
+                  r.status === 'skipped' ? styles.statGold : styles.statRed
+                }>
+                  {r.status === 'created' ? 'Created' : r.status === 'skipped' ? r.error : r.error}
                 </span>
               </div>
             ))}

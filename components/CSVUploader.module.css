@@ -166,3 +166,5 @@
 
 .resultName { font-weight: 600; flex: 1; }
 .resultEmail { color: var(--muted); flex: 1; }
+.skipped { color: var(--gold); font-weight: 700; }
+.statGold { color: var(--gold); }
