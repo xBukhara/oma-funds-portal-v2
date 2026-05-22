@@ -8,9 +8,6 @@ function auth(req: NextRequest) {
 export async function GET(req: NextRequest) {
   if (!auth(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  export async function GET(req: NextRequest) {
-  if (!auth(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
   const supabase = getServiceClient();
   const { data, error } = await supabase
     .from('investors')
@@ -122,6 +119,7 @@ export async function DELETE(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   if (inv?.user_id) {
+    await supabase.auth.admin.deleteUser(inv.user_id);
   }
 
   return NextResponse.json({ success: true });
