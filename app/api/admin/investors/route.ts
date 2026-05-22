@@ -8,10 +8,13 @@ function auth(req: NextRequest) {
 export async function GET(req: NextRequest) {
   if (!auth(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  export async function GET(req: NextRequest) {
+  if (!auth(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   const supabase = getServiceClient();
   const { data, error } = await supabase
     .from('investors')
-    .select('*, nav_records(year, month, nav, monthly_return_pct)')
+    .select('*')
     .order('created_at', { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
