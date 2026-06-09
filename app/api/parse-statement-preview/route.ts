@@ -9,16 +9,13 @@ async function extractTextFromBuffer(buffer: Buffer): Promise<string> {
 }
 
 export async function POST(req: NextRequest) {
-  const adminSecret = req.headers.get('x-admin-secret');
-  if (adminSecret !== process.env.ADMIN_SECRET) {
+  if (req.headers.get('x-admin-secret') !== process.env.ADMIN_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
     const formData = await req.formData();
     const file = formData.get('statement') as File | null;
-
-    // Allow manual override of return % and month
     const manualReturnPct = formData.get('manual_return_pct');
     const manualMonth = formData.get('manual_month');
     const manualYear = formData.get('manual_year');
@@ -29,88 +26,68 @@ export async function POST(req: NextRequest) {
     const rawText = await extractTextFromBuffer(buffer);
     const parsed = parseOmaStatement(rawText);
 
-    // Determine the month and return to apply
-    // Manual overrides take priority over parsed values
+    // Fund NAV from PDF is the source of truth
+    const fundNav = parsed.navTotal;
     const year = manualYear ? parseInt(manualYear as string) : parsed.year;
-    const navTotal = parsed.navTotal;
-    const ytdRoi = parsed.ytdRoi;
-    const allMonthlyReturns = parsed.monthlyReturns;
-
-    // Get latest month from parsed data
-    const latestParsedMonth = allMonthlyReturns[allMonthlyReturns.length - 1];
+    const latestMonth = parsed.monthlyReturns[parsed.monthlyReturns.length - 1];
     const statementMonth = manualMonth
       ? parseInt(manualMonth as string)
-      : (latestParsedMonth?.month ?? new Date().getMonth() + 1);
+      : (latestMonth?.month ?? new Date().getMonth());
     const statementReturnPct = manualReturnPct
       ? parseFloat(manualReturnPct as string)
-      : (latestParsedMonth?.returnPct ?? 0);
+      : (latestMonth?.returnPct ?? 0);
 
-    // Load investors with their latest NAV
     const supabase = getServiceClient();
     const { data: investors } = await supabase
       .from('investors')
       .select('*')
       .order('starting_capital', { ascending: false });
 
-    if (!investors || investors.length === 0) {
+    if (!investors?.length) {
       return NextResponse.json({ error: 'No investors found' }, { status: 404 });
     }
 
-    // Get latest NAV for each investor
-    const { data: allNavRecords } = await supabase
-      .from('nav_records')
-      .select('investor_id, nav, year, month')
-      .in('investor_id', investors.map(i => i.id));
-
-    const latestNavMap: Record<string, number> = {};
-    for (const inv of investors) {
-      const records = (allNavRecords ?? [])
-        .filter(n => n.investor_id === inv.id)
-        .sort((a, b) => a.year !== b.year ? b.year - a.year : b.month - a.month);
-      latestNavMap[inv.id] = records[0]?.nav ?? inv.starting_capital;
-    }
-
-    // Apply ONLY the latest month return to each investor
-    const investorPreviews = investors.map(investor => {
-      const currentNav = latestNavMap[investor.id] ?? investor.starting_capital;
-      const newNav = parseFloat((currentNav * (1 + statementReturnPct / 100)).toFixed(2));
+    // Each investor's new NAV = Fund NAV × their share %
+    const investorPreviews = investors.map(inv => {
+      const newNav = parseFloat((fundNav * (inv.share_pct / 100)).toFixed(2));
+      const currentNav = inv.starting_capital;
       const change = newNav - currentNav;
-      const changePct = statementReturnPct; // same for all investors
 
       return {
-        id: investor.id,
-        name: investor.name,
-        email: investor.email,
-        slug: investor.slug,
+        id: inv.id,
+        name: inv.name,
+        email: inv.email,
+        slug: inv.slug,
+        share_pct: inv.share_pct,
         current_nav: currentNav,
         new_nav: newNav,
         change,
-        change_pct: changePct,
-        monthly_return_pct: statementReturnPct,
-        has_email: !!investor.email,
+        change_pct: statementReturnPct,
+        has_email: !!inv.email,
       };
     });
+
+    const sumCheck = investorPreviews.reduce((s, i) => s + i.new_nav, 0);
 
     return NextResponse.json({
       parsed: {
         year,
-        navTotal,
-        ytdRoi,
-        allMonthlyReturns,
         statementMonth,
         statementReturnPct,
-        monthsInStatement: allMonthlyReturns.length,
+        fundNav,
+        allMonthlyReturns: parsed.monthlyReturns,
+        monthsInStatement: parsed.monthlyReturns.length,
       },
       investors: investorPreviews,
       fundCheck: {
-        parsedNavTotal: navTotal,
-        sumOfInvestorNavs: investorPreviews.reduce((s, i) => s + i.new_nav, 0),
-        note: 'Fund NAV discrepancy is expected — PDF shows total fund value, investor NAVs are proportional shares'
+        fundNav,
+        sumOfInvestorNavs: Math.round(sumCheck * 100) / 100,
+        difference: Math.round((fundNav - sumCheck) * 100) / 100,
+        balanced: Math.abs(fundNav - sumCheck) < 1,
       },
     });
 
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }

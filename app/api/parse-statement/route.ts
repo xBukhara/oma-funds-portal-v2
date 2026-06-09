@@ -12,8 +12,7 @@ async function extractTextFromBuffer(buffer: Buffer): Promise<string> {
 }
 
 export async function POST(req: NextRequest) {
-  const adminSecret = req.headers.get('x-admin-secret');
-  if (adminSecret !== process.env.ADMIN_SECRET) {
+  if (req.headers.get('x-admin-secret') !== process.env.ADMIN_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -30,92 +29,61 @@ export async function POST(req: NextRequest) {
     const rawText = await extractTextFromBuffer(buffer);
     const parsed = parseOmaStatement(rawText);
 
+    const fundNav = parsed.navTotal;
     const year = manualYear ? parseInt(manualYear as string) : parsed.year;
-    const navTotal = parsed.navTotal;
-    const ytdRoi = parsed.ytdRoi;
-
-    const latestParsedMonth = parsed.monthlyReturns[parsed.monthlyReturns.length - 1];
+    const latestMonth = parsed.monthlyReturns[parsed.monthlyReturns.length - 1];
     const statementMonth = manualMonth
       ? parseInt(manualMonth as string)
-      : (latestParsedMonth?.month ?? new Date().getMonth() + 1);
+      : (latestMonth?.month ?? new Date().getMonth());
     const statementReturnPct = manualReturnPct
       ? parseFloat(manualReturnPct as string)
-      : (latestParsedMonth?.returnPct ?? 0);
+      : (latestMonth?.returnPct ?? 0);
 
     const supabase = getServiceClient();
 
-    // Upload PDF to storage
     const filePath = `statements/${year}/${file.name}`;
-    await supabase.storage
-      .from('statements')
+    await supabase.storage.from('statements')
       .upload(filePath, buffer, { contentType: 'application/pdf', upsert: true });
 
-    // Upsert fund return for this month only
     await supabase.from('fund_returns').upsert({
-      year,
-      month: statementMonth,
+      year, month: statementMonth,
       monthly_return_pct: statementReturnPct,
-      nav_total: navTotal,
-      ytd_roi: ytdRoi,
+      nav_total: fundNav,
+      ytd_roi: parsed.ytdRoi,
     }, { onConflict: 'year,month' });
 
-    // Upsert statement record
     const { data: statementRow } = await supabase
       .from('statements')
-      .upsert({
-        year,
-        month: statementMonth,
-        file_path: filePath,
-        uploaded_at: new Date().toISOString(),
-      }, { onConflict: 'year,month' })
-      .select()
-      .single();
+      .upsert({ year, month: statementMonth, file_path: filePath,
+        uploaded_at: new Date().toISOString() }, { onConflict: 'year,month' })
+      .select().single();
 
-    // Load investors
     const { data: investors } = await supabase.from('investors').select('*');
-    if (!investors || investors.length === 0) {
+    if (!investors?.length) {
       return NextResponse.json({ success: true, warning: 'No investors found' });
     }
 
-    // Get latest NAV for each investor
-    const { data: allNavRecords } = await supabase
-      .from('nav_records')
-      .select('investor_id, nav, year, month, id')
-      .in('investor_id', investors.map(i => i.id));
-
-    const latestNavMap: Record<string, { nav: number; id: string }> = {};
-    for (const inv of investors) {
-      const records = (allNavRecords ?? [])
-        .filter(n => n.investor_id === inv.id)
-        .sort((a, b) => a.year !== b.year ? b.year - a.year : b.month - a.month);
-      if (records[0]) {
-        latestNavMap[inv.id] = { nav: records[0].nav, id: records[0].id };
-      }
-    }
-
-    // Apply ONLY this month's return to each investor
     const emailResults: { investor: string; status: string }[] = [];
     const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD },
     });
-
     const portalUrl = process.env.NEXT_PUBLIC_PORTAL_URL ?? 'https://port.omafunds.com';
 
     for (const investor of investors as Investor[]) {
-      const currentNav = latestNavMap[investor.id]?.nav ?? investor.starting_capital;
-      const newNav = parseFloat((currentNav * (1 + statementReturnPct / 100)).toFixed(2));
+      const newNav = parseFloat((fundNav * (investor.share_pct / 100)).toFixed(2));
 
-      // Upsert nav record for this month
       await supabase.from('nav_records').upsert({
         investor_id: investor.id,
-        year,
-        month: statementMonth,
+        year, month: statementMonth,
         nav: newNav,
         monthly_return_pct: statementReturnPct,
       }, { onConflict: 'investor_id,year,month' });
 
-      // Send email
+      await supabase.from('investors')
+        .update({ starting_capital: newNav })
+        .eq('id', investor.id);
+
       if (!investor.email) continue;
 
       const navRecord = {
@@ -133,7 +101,6 @@ export async function POST(req: NextRequest) {
           html: buildInvestorEmailHTML(investor, navRecord, portalUrl),
           text: buildInvestorEmailText(investor, navRecord),
         });
-
         if (statementRow) {
           await supabase.from('email_log').insert({
             statement_id: statementRow.id,
@@ -148,15 +115,13 @@ export async function POST(req: NextRequest) {
           await supabase.from('email_log').insert({
             statement_id: statementRow.id,
             investor_id: investor.id,
-            status: 'failed',
-            error_msg: msg,
+            status: 'failed', error_msg: msg,
           });
         }
         emailResults.push({ investor: investor.email, status: `failed: ${msg}` });
       }
     }
 
-    // Mark email sent
     if (statementRow) {
       await supabase.from('statements')
         .update({ email_sent_at: new Date().toISOString() })
@@ -165,17 +130,16 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      parsed: { year, navTotal, ytdRoi, statementMonth, statementReturnPct },
+      parsed: { year, statementMonth, statementReturnPct, fundNav },
       emailResults,
     });
 
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }
 
 function getMonthName(month: number): string {
-  return ['', 'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'][month] ?? '';
+  return ['','January','February','March','April','May','June',
+    'July','August','September','October','November','December'][month] ?? '';
 }
