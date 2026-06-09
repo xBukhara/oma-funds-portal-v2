@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServiceClient } from '@/lib/supabase';
-import { parseOmaStatement, computeInvestorNAV } from '@/lib/pdfParser';
+import { parseOmaStatement } from '@/lib/pdfParser';
 import { buildInvestorEmailHTML, buildInvestorEmailText } from '@/lib/emailTemplates';
 import nodemailer from 'nodemailer';
 import type { Investor } from '@/types';
 
-// pdf-parse needs to be imported with require in Next.js edge-compatible routes
-// Use dynamic import to avoid issues
 async function extractTextFromBuffer(buffer: Buffer): Promise<string> {
   const pdfParse = (await import('pdf-parse')).default;
   const data = await pdfParse(buffer);
@@ -14,7 +12,6 @@ async function extractTextFromBuffer(buffer: Buffer): Promise<string> {
 }
 
 export async function POST(req: NextRequest) {
-  // ── Auth check ──────────────────────────────────────────────
   const adminSecret = req.headers.get('x-admin-secret');
   if (adminSecret !== process.env.ADMIN_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -23,120 +20,108 @@ export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
     const file = formData.get('statement') as File | null;
+    const manualReturnPct = formData.get('manual_return_pct');
+    const manualMonth = formData.get('manual_month');
+    const manualYear = formData.get('manual_year');
 
-    if (!file) {
-      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
-    }
+    if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 });
 
-    // ── 1. Read PDF buffer ───────────────────────────────────
     const buffer = Buffer.from(await file.arrayBuffer());
-
-    // ── 2. Extract text + parse ──────────────────────────────
     const rawText = await extractTextFromBuffer(buffer);
     const parsed = parseOmaStatement(rawText);
 
-    const { year, navTotal, startingValue, ytdRoi, monthlyReturns } = parsed;
+    const year = manualYear ? parseInt(manualYear as string) : parsed.year;
+    const navTotal = parsed.navTotal;
+    const ytdRoi = parsed.ytdRoi;
+
+    const latestParsedMonth = parsed.monthlyReturns[parsed.monthlyReturns.length - 1];
+    const statementMonth = manualMonth
+      ? parseInt(manualMonth as string)
+      : (latestParsedMonth?.month ?? new Date().getMonth() + 1);
+    const statementReturnPct = manualReturnPct
+      ? parseFloat(manualReturnPct as string)
+      : (latestParsedMonth?.returnPct ?? 0);
 
     const supabase = getServiceClient();
 
-    // ── 3. Upload PDF to Supabase Storage ────────────────────
+    // Upload PDF to storage
     const filePath = `statements/${year}/${file.name}`;
-    const { error: uploadError } = await supabase.storage
+    await supabase.storage
       .from('statements')
-      .upload(filePath, buffer, {
-        contentType: 'application/pdf',
-        upsert: true,
-      });
+      .upload(filePath, buffer, { contentType: 'application/pdf', upsert: true });
 
-    if (uploadError) {
-      return NextResponse.json({ error: `Storage upload failed: ${uploadError.message}` }, { status: 500 });
-    }
+    // Upsert fund return for this month only
+    await supabase.from('fund_returns').upsert({
+      year,
+      month: statementMonth,
+      monthly_return_pct: statementReturnPct,
+      nav_total: navTotal,
+      ytd_roi: ytdRoi,
+    }, { onConflict: 'year,month' });
 
-    // ── 4. Upsert fund-level returns ─────────────────────────
-    for (const { month, returnPct } of monthlyReturns) {
-      await supabase.from('fund_returns').upsert({
-        year,
-        month,
-        monthly_return_pct: returnPct,
-        nav_total: navTotal,
-        ytd_roi: ytdRoi,
-      }, { onConflict: 'year,month' });
-    }
-
-    // ── 5. Upsert statement record ───────────────────────────
+    // Upsert statement record
     const { data: statementRow } = await supabase
       .from('statements')
       .upsert({
         year,
-        month: monthlyReturns[monthlyReturns.length - 1]?.month ?? 12,
+        month: statementMonth,
         file_path: filePath,
         uploaded_at: new Date().toISOString(),
       }, { onConflict: 'year,month' })
       .select()
       .single();
 
-    // ── 6. Load all investors ────────────────────────────────
-    const { data: investors, error: invError } = await supabase
-      .from('investors')
-      .select('*');
-
-    if (invError || !investors || investors.length === 0) {
-      return NextResponse.json({
-        success: true,
-        parsed,
-        warning: 'No investors found — NAV records not written',
-      });
+    // Load investors
+    const { data: investors } = await supabase.from('investors').select('*');
+    if (!investors || investors.length === 0) {
+      return NextResponse.json({ success: true, warning: 'No investors found' });
     }
 
-    // ── 7. Compute + upsert each investor's NAV records ──────
-    const latestNavByInvestor: Map<string, { nav: number; month: number; returnPct: number }> = new Map();
+    // Get latest NAV for each investor
+    const { data: allNavRecords } = await supabase
+      .from('nav_records')
+      .select('investor_id, nav, year, month, id')
+      .in('investor_id', investors.map(i => i.id));
 
-    for (const investor of investors as Investor[]) {
-      const investorMonthly = computeInvestorNAV(
-        investor.starting_capital,
-        monthlyReturns,
-      );
-
-      for (const { month, nav, returnPct } of investorMonthly) {
-        await supabase.from('nav_records').upsert({
-          investor_id: investor.id,
-          year,
-          month,
-          nav,
-          monthly_return_pct: returnPct,
-        }, { onConflict: 'investor_id,year,month' });
-      }
-
-      // Track latest month for email
-      const latest = investorMonthly[investorMonthly.length - 1];
-      if (latest) {
-        latestNavByInvestor.set(investor.id, latest);
+    const latestNavMap: Record<string, { nav: number; id: string }> = {};
+    for (const inv of investors) {
+      const records = (allNavRecords ?? [])
+        .filter(n => n.investor_id === inv.id)
+        .sort((a, b) => a.year !== b.year ? b.year - a.year : b.month - a.month);
+      if (records[0]) {
+        latestNavMap[inv.id] = { nav: records[0].nav, id: records[0].id };
       }
     }
 
-    // ── 8. Send personalized emails ──────────────────────────
+    // Apply ONLY this month's return to each investor
+    const emailResults: { investor: string; status: string }[] = [];
     const transporter = nodemailer.createTransport({
       service: 'gmail',
-      auth: {
-        user: process.env.GMAIL_USER,
-        pass: process.env.GMAIL_APP_PASSWORD,
-      },
+      auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD },
     });
 
     const portalUrl = process.env.NEXT_PUBLIC_PORTAL_URL ?? 'https://port.omafunds.com';
-    const emailResults: { investor: string; status: string }[] = [];
 
     for (const investor of investors as Investor[]) {
-      const latest = latestNavByInvestor.get(investor.id);
-      if (!latest) continue;
+      const currentNav = latestNavMap[investor.id]?.nav ?? investor.starting_capital;
+      const newNav = parseFloat((currentNav * (1 + statementReturnPct / 100)).toFixed(2));
 
-      const navRecord = {
-        id: '',
+      // Upsert nav record for this month
+      await supabase.from('nav_records').upsert({
         investor_id: investor.id,
         year,
-        month: latest.month,
-        nav: latest.nav,
-        monthly_return_pct: latest.returnPct,
+        month: statementMonth,
+        nav: newNav,
+        monthly_return_pct: statementReturnPct,
+      }, { onConflict: 'investor_id,year,month' });
+
+      // Send email
+      if (!investor.email) continue;
+
+      const navRecord = {
+        id: '', investor_id: investor.id, year,
+        month: statementMonth, nav: newNav,
+        monthly_return_pct: statementReturnPct,
         created_at: new Date().toISOString(),
       };
 
@@ -144,12 +129,11 @@ export async function POST(req: NextRequest) {
         await transporter.sendMail({
           from: `OMA Funds <${process.env.GMAIL_USER}>`,
           to: investor.email,
-          subject: `Your OMA Funds Statement — ${getMonthName(latest.month)} ${year}`,
+          subject: `Your OMA Funds Statement — ${getMonthName(statementMonth)} ${year}`,
           html: buildInvestorEmailHTML(investor, navRecord, portalUrl),
           text: buildInvestorEmailText(investor, navRecord),
         });
 
-        // Log success
         if (statementRow) {
           await supabase.from('email_log').insert({
             statement_id: statementRow.id,
@@ -157,11 +141,9 @@ export async function POST(req: NextRequest) {
             status: 'sent',
           });
         }
-
         emailResults.push({ investor: investor.email, status: 'sent' });
       } catch (emailErr) {
-        const msg = emailErr instanceof Error ? emailErr.message : 'Unknown error';
-
+        const msg = emailErr instanceof Error ? emailErr.message : 'Unknown';
         if (statementRow) {
           await supabase.from('email_log').insert({
             statement_id: statementRow.id,
@@ -170,22 +152,20 @@ export async function POST(req: NextRequest) {
             error_msg: msg,
           });
         }
-
         emailResults.push({ investor: investor.email, status: `failed: ${msg}` });
       }
     }
 
-    // ── 9. Mark statement email_sent_at ─────────────────────
+    // Mark email sent
     if (statementRow) {
-      await supabase
-        .from('statements')
+      await supabase.from('statements')
         .update({ email_sent_at: new Date().toISOString() })
         .eq('id', statementRow.id);
     }
 
     return NextResponse.json({
       success: true,
-      parsed: { year, navTotal, ytdRoi, monthsProcessed: monthlyReturns.length },
+      parsed: { year, navTotal, ytdRoi, statementMonth, statementReturnPct },
       emailResults,
     });
 
