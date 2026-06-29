@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import { Chart, registerables } from 'chart.js';
 import type { Investor, NavRecord, Statement } from '@/types';
 import StockTicker from './StockTicker';
+import IpoSummaryCard from './IpoSummaryCard';
 import styles from './InvestorDashboard.module.css';
 
 Chart.register(...registerables);
@@ -158,6 +159,9 @@ export default function InvestorDashboard({ investor, navRecords, latestStatemen
           For questions, contact <a href="mailto:statements@omafunds.com" style={{ color: 'var(--blue)' }}>
           statements@omafunds.com</a>
         </div>
+
+        {/* Pre-IPO Holdings summary card — only renders if investor has holdings */}
+        <IpoSummaryCard slug={investor.slug} userId={investor.user_id} />
 
         {/* Hero — Current NAV */}
         <div className={styles.heroGrid}>

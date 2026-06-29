@@ -12,6 +12,12 @@ interface InvestorRow {
   starting_capital: number;
   share_pct: number;
   temp_password: string;
+  // Optional IPO holding fields (single holding per row for simplicity)
+  ipo_company?: string;
+  ipo_ticker?: string;
+  ipo_shares?: number;
+  ipo_entry_price?: number;
+  ipo_current_valuation?: number;
 }
 
 export async function POST(req: NextRequest) {
@@ -51,19 +57,35 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      const { error: invError } = await supabase.from('investors').insert({
-        user_id: authUser.user.id,
-        name: investor.name,
-        email: investor.email,
-        slug: investor.slug.toLowerCase().replace(/\s+/g, '-'),
-        starting_capital: investor.starting_capital,
-        share_pct: investor.share_pct ?? 0,
-      });
+      const { data: newInvestor, error: invError } = await supabase
+        .from('investors')
+        .insert({
+          user_id: authUser.user.id,
+          name: investor.name,
+          email: investor.email,
+          slug: investor.slug.toLowerCase().replace(/\s+/g, '-'),
+          starting_capital: investor.starting_capital,
+          share_pct: investor.share_pct ?? 0,
+        })
+        .select()
+        .single();
 
       if (invError) {
         await supabase.auth.admin.deleteUser(authUser.user.id);
         results.push({ name: investor.name, email: investor.email, status: 'failed', error: invError.message });
         continue;
+      }
+
+      // Optional: create IPO holding if provided
+      if (investor.ipo_company && investor.ipo_shares && investor.ipo_entry_price && investor.ipo_current_valuation) {
+        await supabase.from('ipo_holdings').insert({
+          investor_id: newInvestor.id,
+          company_name: investor.ipo_company,
+          ticker: investor.ipo_ticker || null,
+          shares: investor.ipo_shares,
+          entry_price: investor.ipo_entry_price,
+          current_valuation: investor.ipo_current_valuation,
+        });
       }
 
       results.push({ name: investor.name, email: investor.email, status: 'created' });

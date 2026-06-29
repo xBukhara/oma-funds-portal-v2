@@ -10,9 +10,10 @@ import EmailLog from './EmailLog';
 import AccountHistory from './AccountHistory';
 import NavSeeder from './NavSeeder';
 import NavEditor from './NavEditor';
+import IpoHoldingsManager from './IpoHoldingsManager';
 import styles from './AdminPortal.module.css';
 
-type Tab = 'upload' | 'investors' | 'history' | 'seed' | 'dashboard' | 'growth' | 'tape' | 'emails';
+type Tab = 'upload' | 'investors' | 'history' | 'seed' | 'ipo' | 'dashboard' | 'growth' | 'tape' | 'emails';
 
 interface Props {
   investors: Investor[];
@@ -26,6 +27,7 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'investors', label: 'Investors',         icon: '◎' },
   { id: 'history',   label: 'Account History',  icon: '⇄' },
   { id: 'seed',      label: 'NAV Manager',      icon: '⚡' },
+  { id: 'ipo',       label: 'IPO Holdings',     icon: '◇' },
   { id: 'dashboard', label: 'OMA Dashboard',     icon: '▦' },
   { id: 'growth',    label: 'OMA Growth',        icon: '↗' },
   { id: 'tape',      label: 'Tape Decoder',      icon: '◈' },
@@ -136,6 +138,18 @@ export default function AdminPortal({ investors, fundReturns, statements, emailL
                   }}
                 />
               )}
+            </div>
+          )}
+          {activeTab === 'ipo' && (
+            <div>
+              <div style={{ marginBottom: 28 }}>
+                <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 800,
+                  letterSpacing: '-0.6px', margin: '0 0 8px' }}>IPO Holdings</h1>
+                <p style={{ fontSize: 14, color: 'var(--muted)', margin: 0 }}>
+                  Manage Pre-IPO and private equity positions for each investor
+                </p>
+              </div>
+              <IpoHoldingsManager investors={liveInvestors} />
             </div>
           )}
           {activeTab === 'dashboard' && <AdminDashboard fundReturns={fundReturns} />}
